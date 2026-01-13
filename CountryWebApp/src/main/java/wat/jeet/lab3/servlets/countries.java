@@ -1,8 +1,9 @@
 package wat.jeet.lab3.servlets;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.security.cert.X509Certificate;
+import java.util.List;
+import java.util.Map;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -18,6 +19,9 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+
 public class countries extends HttpServlet {
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
@@ -32,7 +36,6 @@ public class countries extends HttpServlet {
         String apiResource = "name/" + countryName;
 
         try {
-            // Use your SSL‑bypass Jersey client
             Client client = createJerseyClient();
 
             WebTarget webserviceClient = client.target(apiEndpointUrl);
@@ -43,27 +46,23 @@ public class countries extends HttpServlet {
                             .request(MediaType.APPLICATION_JSON)
                             .get(String.class);
 
-            if (response.getStatus() == 200) {
-                PrintWriter out = response.getWriter();
-                out.println(jsonResponse);
-            } else {
-                response.sendError(
-                        response.getStatus(),
-                        "Failed to fetch data from the API"
-                );
-            }
+            // Parse JSON › Java List<Map>
+            ObjectMapper objectMapper = new ObjectMapper();
+            List<Map<String, Object>> countries =
+                    objectMapper.readValue(jsonResponse, new TypeReference<>() {});
+
+            // Send parsed data to JSP
+            request.setAttribute("countryData", countries);
+            request.getRequestDispatcher("index.jsp").forward(request, response);
 
         } catch (Exception e) {
-            response.sendError(
-                    HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-                    "Error fetching country data: " + e.getMessage()
-            );
+            // API error › show message in JSP
+            request.setAttribute("errorMessage", "Country not found.");
+            request.getRequestDispatcher("index.jsp").forward(request, response);
         }
     }
 
-    // ---------------------------------------------------------
-    // SSL‑bypass Jersey client (your provided method)
-    // ---------------------------------------------------------
+    // SSL-bypass Jersey client
     private Client createJerseyClient() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
@@ -71,14 +70,10 @@ public class countries extends HttpServlet {
             sslContext.init(null, new TrustManager[]{
                     new X509TrustManager() {
                         @Override
-                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
-                            // No validation
-                        }
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {}
 
                         @Override
-                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
-                            // No validation
-                        }
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {}
 
                         @Override
                         public X509Certificate[] getAcceptedIssuers() {
@@ -93,9 +88,7 @@ public class countries extends HttpServlet {
                     .build();
 
         } catch (Exception e) {
-            throw new RuntimeException(
-                    "Error creating Jersey client with SSL bypass", e
-            );
+            throw new RuntimeException("Error creating Jersey client with SSL bypass", e);
         }
     }
 
@@ -109,10 +102,5 @@ public class countries extends HttpServlet {
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         processRequest(request, response);
-    }
-
-    @Override
-    public String getServletInfo() {
-        return "Short description";
     }
 }
